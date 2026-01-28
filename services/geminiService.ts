@@ -56,15 +56,12 @@ Target JSON Structure Example:
 }
 `;
 
-export const generateSunoPrompt = async (base64Image: string, apiKey?: string): Promise<AnalysisResult> => {
-  // Prioritize user-provided key, fallback to environment variable
-  const effectiveKey = apiKey || process.env.API_KEY;
-
-  if (!effectiveKey) {
-    throw new Error("API Key is missing. Please set it in Settings.");
+export const generateSunoPrompt = async (base64Image: string, apiKey: string): Promise<AnalysisResult> => {
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: effectiveKey });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
   try {
     const response = await ai.models.generateContent({
@@ -84,8 +81,8 @@ export const generateSunoPrompt = async (base64Image: string, apiKey?: string): 
       },
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.0, 
-        seed: 42, 
+        temperature: 0.0,
+        seed: 42,
       },
     });
 
@@ -94,9 +91,9 @@ export const generateSunoPrompt = async (base64Image: string, apiKey?: string): 
         let text = response.text.trim();
         // Remove markdown code blocks if the model includes them despite instructions
         if (text.startsWith('```json')) {
-            text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         } else if (text.startsWith('```')) {
-            text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
         }
 
         const jsonResponse = JSON.parse(text) as AnalysisResult;
@@ -107,7 +104,7 @@ export const generateSunoPrompt = async (base64Image: string, apiKey?: string): 
         throw new Error("アルゴリズム出力のデコードに失敗しました。");
       }
     }
-    
+
     throw new Error("モデルからの応答がありませんでした。");
   } catch (error) {
     console.error("Gemini API Error:", error);

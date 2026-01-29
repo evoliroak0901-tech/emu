@@ -60,8 +60,8 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
   }
 
   // DIRECT REST API CALL - Bypassing SDK to prevent versioning issues
-  // Using v1beta endpoint which explicitly supports gemini-1.5-flash
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // Using v1beta endpoint with gemini-1.5-flash-latest to ensure we hit a valid alias
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
   const payload = {
     contents: [{

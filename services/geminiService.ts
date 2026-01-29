@@ -65,7 +65,7 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-1.5-flash-002',
       contents: {
         parts: [
           {
@@ -80,6 +80,7 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
         ],
       },
       config: {
+        responseMimeType: 'application/json',
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.0,
         seed: 42,

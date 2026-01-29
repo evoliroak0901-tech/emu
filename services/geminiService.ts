@@ -57,9 +57,8 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
 
   const cleanKey = apiKey.trim();
 
-  // USING LEGACY gemini-pro-vision - most widely supported multimodal model
-  // This model exists since 2023 and works with almost all API keys
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${cleanKey}`;
+  // Using gemini-2.5-flash - confirmed available in this API key's model list
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cleanKey}`;
 
   const payload = {
     contents: [{

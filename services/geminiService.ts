@@ -1,6 +1,5 @@
 import { AnalysisResult } from "../types";
 
-// The strict algorithm definition v3.0
 const SYSTEM_INSTRUCTION_TEXT = `
 Role: You are "Suno Architect v3.0", a deterministic algorithmic engine converting Visual Data into Audio Parameters.
 Directive: Do not be creative. Be analytical. Execute the following Logic Gates to generate the output.
@@ -59,24 +58,18 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  // FALLBACK STRATEGY: gemini-1.5-flash is 404ing.
-  // Switching to gemini-1.5-pro-latest which often has different availability.
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`;
-
-  // Wait, let's try gemini-1.5-flash one last time but correctly formatted without 'system_instruction' 
-  // sometimes system instruction field causes 404 on beta endpoints if not allowlisted.
-  // Actually, let's try "gemini-1.5-pro-latest" - usually more available than flash if flash is region locked.
-
-  // FINAL ATTEMPT STRATEGY: 
-  // Use gemini-1.5-flash (standard name) with v1beta
-  // BUT remove system_instruction field and merge it into contents
-  // This is often the cause of "Not Found/Not Supported" errors on some accounts.
+  // FINAL FIX STRATEGY: 
+  // 1. Use clean key (trimmed)
+  // 2. Use 'v1' stable endpoint (not v1beta)
+  // 3. Use 'gemini-1.5-flash' (standard stable model)
+  const cleanKey = apiKey.trim();
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
 
   const payload = {
     contents: [{
       parts: [
         {
-          text: SYSTEM_INSTRUCTION_TEXT + "\n\nAnalyze the following image:"
+          text: SYSTEM_INSTRUCTION_TEXT + "\n\nAnalyze the following image and return ONLY the JSON:"
         },
         {
           inline_data: {
@@ -86,7 +79,6 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
         }
       ]
     }],
-    // Removed specific generationConfig that might trigger errors
     generationConfig: {
       temperature: 0.0
     }
@@ -105,12 +97,16 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
       const errorData = await response.json().catch(() => ({}));
       console.error("Gemini Raw Error:", errorData);
 
-      // If 404 again, we have to throw specific message
+      const errorMessage = errorData.error?.message || response.statusText;
+
+      // Provide actionable feedback based on error code
       if (response.status === 404) {
-        throw new Error("Gemini Model Not Found. This API key may not have access to Gemini 1.5 Flash yet.");
+        throw new Error(`Gemini Model Not Found (404). Please verify your API key is valid for Gemini 1.5 Flash.`);
+      }
+      if (response.status === 400) {
+        throw new Error(`Invalid Request (400). Please check your API key.`);
       }
 
-      const errorMessage = errorData.error?.message || response.statusText;
       throw new Error(`Gemini API Error (${response.status}): ${errorMessage}`);
     }
 
@@ -131,12 +127,11 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
         return jsonResponse;
       } catch (e) {
         console.error("JSON Parse Error", e);
-        // Fallback: if JSON parse fails, try to wrap it manually or return partial error
         throw new Error("Failed to parse AI response. Please try a clearer image.");
       }
     }
 
-    throw new Error("No response content generated.");
+    throw new Error("No response content generated from Gemini.");
 
   } catch (error) {
     console.error("Gemini API Error:", error);

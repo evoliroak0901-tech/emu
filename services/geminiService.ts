@@ -37,12 +37,9 @@ Target_BPM = 70 + (Structure_Density * 10) + (Luminance_Value * 3)
 - IF Edge_Sharpness <= 6: Instruments = Piano, Acoustic Guitar, Live Drums, Warm Pads
 
 ## STEP 5: FINAL OUTPUT GENERATION
-Construct the valid JSON response based strictly on the above calculations.
-- "logs": Show the calculation process and variable values ([S], [L], etc). (Japanese)
-- "technical_summary": Explain the logic path taken based on the specific variables. (Japanese)
-- "prompt": The final comma-separated English prompt for Suno AI.
+YOU MUST RESPOND WITH VALID JSON ONLY. NO MARKDOWN. NO EXPLANATIONS. ONLY THE JSON OBJECT.
 
-Target JSON Structure Example:
+Target JSON Structure:
 {
   "logs": [
     { "visual_feature": "構造密度[S]: 9.2 (極めて高い)", "musical_translation": "BPM計算式に基づき175 BPMを設定", "parameter": "Tempo Logic" },
@@ -58,18 +55,17 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  // FINAL FIX STRATEGY: 
-  // 1. Use clean key (trimmed)
-  // 2. Use 'v1' stable endpoint (not v1beta)
-  // 3. Use 'gemini-1.5-flash' (standard stable model)
   const cleanKey = apiKey.trim();
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+
+  // USING LEGACY gemini-pro-vision - most widely supported multimodal model
+  // This model exists since 2023 and works with almost all API keys
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${cleanKey}`;
 
   const payload = {
     contents: [{
       parts: [
         {
-          text: SYSTEM_INSTRUCTION_TEXT + "\n\nAnalyze the following image and return ONLY the JSON:"
+          text: SYSTEM_INSTRUCTION_TEXT
         },
         {
           inline_data: {
@@ -98,15 +94,6 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
       console.error("Gemini Raw Error:", errorData);
 
       const errorMessage = errorData.error?.message || response.statusText;
-
-      // Provide actionable feedback based on error code
-      if (response.status === 404) {
-        throw new Error(`Gemini Model Not Found (404). Please verify your API key is valid for Gemini 1.5 Flash.`);
-      }
-      if (response.status === 400) {
-        throw new Error(`Invalid Request (400). Please check your API key.`);
-      }
-
       throw new Error(`Gemini API Error (${response.status}): ${errorMessage}`);
     }
 
@@ -127,11 +114,12 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
         return jsonResponse;
       } catch (e) {
         console.error("JSON Parse Error", e);
-        throw new Error("Failed to parse AI response. Please try a clearer image.");
+        console.error("Raw response:", text);
+        throw new Error("AI returned invalid JSON. Please try again.");
       }
     }
 
-    throw new Error("No response content generated from Gemini.");
+    throw new Error("No response from Gemini.");
 
   } catch (error) {
     console.error("Gemini API Error:", error);

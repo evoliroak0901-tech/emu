@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AnalysisResult } from "../types";
 
 // The strict algorithm definition v3.0
@@ -61,47 +61,45 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    systemInstruction: SYSTEM_INSTRUCTION,
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.0,
+    }
+  });
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash-002',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: base64Image,
-            },
-          },
-          {
-            text: "Execute Suna Architect Algorithm v3.0. Analyze this image and calculate the audio parameters.",
-          },
-        ],
-      },
-      config: {
-        responseMimeType: 'application/json',
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.0,
-        seed: 42,
-      },
-    });
+    const prompt = "Execute Suna Architect Algorithm v3.0. Analyze this image and calculate the audio parameters.";
 
-    if (response.text) {
+    const imagePart = {
+      inlineData: {
+        data: base64Image,
+        mimeType: "image/jpeg",
+      },
+    };
+
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text();
+
+    if (text) {
       try {
-        let text = response.text.trim();
+        let cleanText = text.trim();
         // Remove markdown code blocks if the model includes them despite instructions
-        if (text.startsWith('```json')) {
-          text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (text.startsWith('```')) {
-          text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        if (cleanText.startsWith('```json')) {
+          cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (cleanText.startsWith('```')) {
+          cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '');
         }
 
-        const jsonResponse = JSON.parse(text) as AnalysisResult;
+        const jsonResponse = JSON.parse(cleanText) as AnalysisResult;
         return jsonResponse;
       } catch (e) {
         console.error("JSON Parse Error", e);
-        console.log("Raw Text:", response.text);
+        console.log("Raw Text:", text);
         throw new Error("アルゴリズム出力のデコードに失敗しました。");
       }
     }

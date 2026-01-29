@@ -59,10 +59,9 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  // FALLBACK TO LEGACY STABLE GEMINI MODEL
-  // gemini-1.5-flash is consistently returning 404, so we switch to gemini-pro-vision
-  // Note: gemini-pro-vision does not support 'system_instruction' proper, so we prepend it to the prompt.
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // FALLBACK STRATEGY: gemini-1.5-flash is 404ing.
+  // Switching to gemini-1.5-pro-latest which often has different availability.
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`;
 
   // Wait, let's try gemini-1.5-flash one last time but correctly formatted without 'system_instruction' 
   // sometimes system instruction field causes 404 on beta endpoints if not allowlisted.

@@ -1,8 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AnalysisResult } from "../types";
 
 // The strict algorithm definition v3.0
-// Forces the LLM to act as a deterministic logic engine
 const SYSTEM_INSTRUCTION = `
 Role: You are "Suno Architect v3.0", a deterministic algorithmic engine converting Visual Data into Audio Parameters.
 Directive: Do not be creative. Be analytical. Execute the following Logic Gates to generate the output.
@@ -61,34 +59,60 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash-001",
-    systemInstruction: SYSTEM_INSTRUCTION,
+  // DIRECT REST API CALL - Bypassing SDK to prevent versioning issues
+  // Using v1beta endpoint which explicitly supports gemini-1.5-flash
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const payload = {
+    contents: [{
+      parts: [
+        {
+          inline_data: {
+            mime_type: "image/jpeg",
+            data: base64Image
+          }
+        },
+        {
+          text: "Execute Suna Architect Algorithm v3.0. Analyze this image and calculate the audio parameters."
+        }
+      ]
+    }],
+    system_instruction: {
+      parts: [
+        { text: SYSTEM_INSTRUCTION }
+      ]
+    },
     generationConfig: {
-      responseMimeType: "application/json",
+      response_mime_type: "application/json",
       temperature: 0.0,
+      seed: 42
     }
-  });
+  };
 
   try {
-    const prompt = "Execute Suna Architect Algorithm v3.0. Analyze this image and calculate the audio parameters.";
-
-    const imagePart = {
-      inlineData: {
-        data: base64Image,
-        mimeType: "image/jpeg",
+    const response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
       },
-    };
+      body: JSON.stringify(payload)
+    });
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Gemini Raw Error:", errorData);
+      const errorMessage = errorData.error?.message || response.statusText;
+      throw new Error(`Gemini API Error (${response.status}): ${errorMessage}`);
+    }
 
-    if (text) {
+    const data = await response.json();
+
+    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
+      const text = data.candidates[0].content.parts[0].text;
+
       try {
         let cleanText = text.trim();
-        // Remove markdown code blocks if the model includes them despite instructions
+        // Remove markdown code blocks
         if (cleanText.startsWith('```json')) {
           cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         } else if (cleanText.startsWith('```')) {
@@ -104,7 +128,8 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
       }
     }
 
-    throw new Error("モデルからの応答がありませんでした。");
+    throw new Error("モデルからの応答形式が予期したものと異なります。");
+
   } catch (error) {
     console.error("Gemini API Error:", error);
     throw error;

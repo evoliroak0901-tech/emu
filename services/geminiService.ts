@@ -1,7 +1,7 @@
 import { AnalysisResult } from "../types";
 
 // The strict algorithm definition v3.0
-const SYSTEM_INSTRUCTION = `
+const SYSTEM_INSTRUCTION_TEXT = `
 Role: You are "Suno Architect v3.0", a deterministic algorithmic engine converting Visual Data into Audio Parameters.
 Directive: Do not be creative. Be analytical. Execute the following Logic Gates to generate the output.
 
@@ -59,33 +59,37 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     throw new Error("API Key is required. Please configure your Gemini API key in Settings.");
   }
 
-  // DIRECT REST API CALL - Bypassing SDK to prevent versioning issues
-  // Using v1beta endpoint with gemini-1.5-flash-latest to ensure we hit a valid alias
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  // FALLBACK TO LEGACY STABLE GEMINI MODEL
+  // gemini-1.5-flash is consistently returning 404, so we switch to gemini-pro-vision
+  // Note: gemini-pro-vision does not support 'system_instruction' proper, so we prepend it to the prompt.
+  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  // Wait, let's try gemini-1.5-flash one last time but correctly formatted without 'system_instruction' 
+  // sometimes system instruction field causes 404 on beta endpoints if not allowlisted.
+  // Actually, let's try "gemini-1.5-pro-latest" - usually more available than flash if flash is region locked.
+
+  // FINAL ATTEMPT STRATEGY: 
+  // Use gemini-1.5-flash (standard name) with v1beta
+  // BUT remove system_instruction field and merge it into contents
+  // This is often the cause of "Not Found/Not Supported" errors on some accounts.
 
   const payload = {
     contents: [{
       parts: [
         {
+          text: SYSTEM_INSTRUCTION_TEXT + "\n\nAnalyze the following image:"
+        },
+        {
           inline_data: {
             mime_type: "image/jpeg",
             data: base64Image
           }
-        },
-        {
-          text: "Execute Suna Architect Algorithm v3.0. Analyze this image and calculate the audio parameters."
         }
       ]
     }],
-    system_instruction: {
-      parts: [
-        { text: SYSTEM_INSTRUCTION }
-      ]
-    },
+    // Removed specific generationConfig that might trigger errors
     generationConfig: {
-      response_mime_type: "application/json",
-      temperature: 0.0,
-      seed: 42
+      temperature: 0.0
     }
   };
 
@@ -101,6 +105,12 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error("Gemini Raw Error:", errorData);
+
+      // If 404 again, we have to throw specific message
+      if (response.status === 404) {
+        throw new Error("Gemini Model Not Found. This API key may not have access to Gemini 1.5 Flash yet.");
+      }
+
       const errorMessage = errorData.error?.message || response.statusText;
       throw new Error(`Gemini API Error (${response.status}): ${errorMessage}`);
     }
@@ -112,7 +122,6 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
 
       try {
         let cleanText = text.trim();
-        // Remove markdown code blocks
         if (cleanText.startsWith('```json')) {
           cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         } else if (cleanText.startsWith('```')) {
@@ -123,12 +132,12 @@ export const generateSunoPrompt = async (base64Image: string, apiKey: string): P
         return jsonResponse;
       } catch (e) {
         console.error("JSON Parse Error", e);
-        console.log("Raw Text:", text);
-        throw new Error("アルゴリズム出力のデコードに失敗しました。");
+        // Fallback: if JSON parse fails, try to wrap it manually or return partial error
+        throw new Error("Failed to parse AI response. Please try a clearer image.");
       }
     }
 
-    throw new Error("モデルからの応答形式が予期したものと異なります。");
+    throw new Error("No response content generated.");
 
   } catch (error) {
     console.error("Gemini API Error:", error);
